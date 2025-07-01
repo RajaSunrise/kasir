@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Sistem Kasir Modern{% endblock %}</title>
+
+    <!-- Google Fonts: Inter -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+    <!-- Font Awesome (untuk ikon) -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <!-- CSS Utama -->
+    <link rel="stylesheet" href="{{ url_for('static', path='css/modern-style.css') }}">
+
+    <!-- Toastify.js (untuk notifikasi canggih) -->
+    <link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/toastify-js/src/toastify.min.css">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Sidebar Navigasi -->
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <i class="fas fa-cash-register"></i>
+                <span class="sidebar-title">KasirModern</span>
+            </div>
+            <nav class="sidebar-nav">
+                <a href="/kasir" class="nav-link {% if request.url.path == '/kasir' %}active{% endif %}">
+                    <i class="fas fa-shopping-cart"></i>
+                    <span>Halaman Kasir</span>
+                </a>
+                <a href="/barang" class="nav-link {% if request.url.path == '/barang' %}active{% endif %}">
+                    <i class="fas fa-box-open"></i>
+                    <span>Input Barang</span>
+                </a>
+            </nav>
+            <div class="sidebar-footer">
+                <button id="logoutBtn" class="logout-button">
+                    <i class="fas fa-sign-out-alt"></i>
+                    <span>Logout</span>
+                </button>
+            </div>
+        </aside>
+
+        <!-- Konten Utama -->
+        <main class="main-content">
+            {% block content %}{% endblock %}
+        </main>
+    </div>
+
+    <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/toastify-js"></script>
+    {% block scripts %}{% endblock %}
+    <script>
+        // Logika check login dan logout ditempatkan di layout utama
+        async function checkLoginStatus() {
+            try {
+                const response = await fetch('/api/check-login');
+                const data = await response.json();
+                if (!data.logged_in) {
+                    window.location.href = '/login';
+                }
+            } catch (error) {
+                console.error('Error checking login status:', error);
+                window.location.href = '/login'; // Arahkan ke login jika API gagal
+            }
+        }
+
+        async function logout() {
+            const response = await fetch('/api/logout', { method: 'POST' });
+            if (response.ok) {
+                Toastify({ text: "Logout berhasil!", duration: 2000, gravity: "top", position: "right", backgroundColor: "#4CAF50" }).showToast();
+                setTimeout(() => window.location.href = '/login', 1500);
+            } else {
+                Toastify({ text: "Logout gagal, coba lagi.", duration: 3000, gravity: "top", position: "right", backgroundColor: "#F44336" }).showToast();
+            }
+        }
+
+        // Panggil checkLoginStatus saat halaman dimuat
+        document.addEventListener('DOMContentLoaded', () => {
+            checkLoginStatus();
+            const logoutBtn = document.getElementById('logoutBtn');
+            if(logoutBtn) {
+                logoutBtn.addEventListener('click', logout);
+            }
+        });
+    </script>
+</body>
+</html>

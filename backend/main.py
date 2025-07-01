@@ -1,55 +1,39 @@
-from fastapi import FastAPI, HTTPException, Depends, Request, Response
+# file: main.py
+
+from fastapi import FastAPI, Depends, HTTPException, Request, Response
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
-
 from sqlalchemy.orm import Session
+from typing import List
+
+from . import crud, models, schemas
+from .database import SessionLocal
+
+app = FastAPI(title="API Kasir Sederhana", version="1.0.0")
 
 
-from . import models, database
-from pydantic import BaseModel
-
-app = FastAPI()
-
-# template dan staticfiles
-templates = Jinja2Templates(directory="frontend")
+templates = Jinja2Templates(directory="templates")
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 # Konfigurasi CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"], 
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Dependency
+
 def get_db():
-    db = database.SessionLocal()
+    db = SessionLocal()
     try:
         yield db
     finally:
         db.close()
 
-class ProdukCreate(BaseModel):
-    kode: str
-    nama: str
-    harga: int
-    jumlah: int
-
-class DetailPenjualanSchema(BaseModel):
-    produk_id: str
-    quantity: int
-
-class PenjualanCreate(BaseModel):
-    metode_pembayaran: str
-    produk_items: list[DetailPenjualanSchema]
-
-class LoginData(BaseModel):
-    username: str
-    password: str
 
 @app.get("/")
 def home(request: Request):
@@ -63,84 +47,71 @@ def barang(request: Request):
 def kasir(request: Request):
     return templates.TemplateResponse("kasir.html", {"request": request})
 
-@app.post("/produk/")
-def create_produk(produk: ProdukCreate, db: Session = Depends(get_db)):
-    db_produk = models.Produk(**produk.dict())
-    db.add(db_produk)
-    db.commit()
-    db.refresh(db_produk)
+# --- Endpoint API untuk Produk ---
+
+@app.post("/api/produk/", response_model=schemas.Produk, status_code=201, tags=["Produk"])
+def create_produk_endpoint(produk: schemas.ProdukCreate, db: Session = Depends(get_db)):
+    """Membuat produk baru."""
+    db_produk = crud.get_produk_by_kode(db, kode=produk.kode)
+    if db_produk:
+        raise HTTPException(status_code=400, detail="Kode produk sudah terdaftar")
+    return crud.create_produk(db=db, produk=produk)
+
+@app.get("/api/produk/nama/{nama}", response_model=schemas.Produk, tags=["Produk"])
+def read_produk_by_nama_endpoint(nama: str, db: Session = Depends(get_db)):
+    """Mencari produk berdasarkan nama."""
+    db_produk = crud.get_produk_by_nama(db, nama=nama)
+    if db_produk is None:
+        raise HTTPException(status_code=404, detail="Produk tidak ditemukan")
     return db_produk
 
-@app.get("/produk/nama/{nama}")
-def read_produk_by_nama(nama: str, db: Session = Depends(get_db)):
-    produk = db.query(models.Produk).filter(models.Produk.nama == nama).first()
-    if produk is None:
-        raise HTTPException(status_code=404, detail="Produk tidak ditemukan")
-    return produk
+@app.get("/api/produk/nama/", response_model=List[str], tags=["Produk"])
+def read_all_nama_produk_endpoint(db: Session = Depends(get_db)):
+    """Mendapatkan semua nama produk."""
+    nama_list = crud.get_all_produk_nama(db)
+    return [nama[0] for nama in nama_list]
 
-@app.get("/produk/nama/")
-def read_all_nama_produk(db: Session = Depends(get_db)):
-    produk_list = db.query(models.Produk.nama).all()
-    return [produk.nama for produk in produk_list]
+@app.get("/api/produk/", response_model=List[schemas.Produk], tags=["Produk"])
+def read_produk_list_endpoint(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
+    """Mendapatkan daftar semua produk."""
+    produks = crud.get_produks(db, skip=skip, limit=limit)
+    return produks
 
-@app.get("/produk/")
-def read_produk_list(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
-    produk = db.query(models.Produk).offset(skip).limit(limit).all()
-    return produk
+# --- Endpoint API untuk Penjualan ---
 
-@app.post("/penjualan/")
-def create_penjualan(penjualan: PenjualanCreate, db: Session = Depends(get_db)):
-    total_penjualan = 0
-    for item in penjualan.produk_items:
-        produk = db.query(models.Produk).filter(models.Produk.kode == item.produk_id).first()
-        if not produk:
-            raise HTTPException(status_code=404, detail=f"Produk dengan ID {item.produk_id} tidak ditemukan")
-        
-        total_penjualan += produk.harga * item.quantity
+@app.post("/api/penjualan/", response_model=schemas.Penjualan, status_code=201, tags=["Penjualan"])
+def create_penjualan_endpoint(penjualan: schemas.PenjualanCreate, db: Session = Depends(get_db)):
+    """Membuat transaksi penjualan baru."""
+    return crud.create_penjualan(db=db, penjualan=penjualan)
 
-    db_penjualan = models.Penjualan(
-        metode_pembayaran=penjualan.metode_pembayaran,
-        total=total_penjualan
-    )
-    db.add(db_penjualan)
-    db.commit()
-    db.refresh(db_penjualan)
 
-    for item in penjualan.produk_items:
-        detail_penjualan = models.DetailPenjualan(
-            penjualan_id=db_penjualan.id,
-            produk_id=item.produk_id,
-            quantity=item.quantity
-        )
-        db.add(detail_penjualan)
-    db.commit()
-
-    return db_penjualan
-
-@app.get("/login")
-def login(request: Request):
+@app.get("/login", tags=["Halaman"])
+def login_page(request: Request):
     return templates.TemplateResponse("login.html", {"request": request})
 
-@app.post("/login")
-def login_post(login_data: LoginData, response: Response):
+@app.post("/api/login", tags=["Autentikasi"])
+def login_post(login_data: schemas.LoginData, response: Response):
+    """
+    Login user.
+    PERINGATAN: Ini adalah metode login yang SANGAT TIDAK AMAN.
+    Di aplikasi nyata, gunakan hashing password (misal: passlib) dan database user.
+    """
     if login_data.username == "kasir" and login_data.password == "kasiraja":
-        response.set_cookie(key="session", value="logged_in", httponly=True)
-        return {"message": "Login successful"}
+        response.set_cookie(key="session", value="logged_in_kasir", httponly=True, samesite="lax")
+        return {"message": "Login berhasil"}
     else:
-        raise HTTPException(status_code=401, detail="Invalid username or password")
+        raise HTTPException(status_code=401, detail="Username atau password salah")
 
-@app.post("/logout")
+@app.post("/api/logout", tags=["Autentikasi"])
 async def logout(response: Response):
+    """Logout user dengan menghapus cookie."""
     response.delete_cookie(key="session")
-    return {"message": "Logged out successfully"}
+    return {"message": "Logout berhasil"}
 
-@app.get("/check-login")
+@app.get("/api/check-login", tags=["Autentikasi"])
 async def check_login(request: Request):
+    """Mengecek status login dari cookie."""
     session = request.cookies.get("session")
-    if session:
+    if session == "logged_in_kasir":
         return JSONResponse(content={"logged_in": True})
     return JSONResponse(content={"logged_in": False})
-
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)

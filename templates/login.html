@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login Kasir</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="{{ url_for('static', path='css/modern-style.css') }}">
+    <link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/toastify-js/src/toastify.min.css">
+</head>
+<body>
+    <div class="login-container">
+        <div class="card login-card">
+            <div class="login-header">
+                <i class="fas fa-cash-register"></i>
+                <h1>Login Kasir</h1>
+            </div>
+            <form id="loginForm">
+                <div class="form-group">
+                    <label for="username">Username</label>
+                    <input type="text" id="username" required>
+                </div>
+                <div class="form-group">
+                    <label for="password">Password</label>
+                    <input type="password" id="password" required>
+                </div>
+                <button type="submit" class="btn btn-primary btn-block" style="margin-top: 1.5rem;">
+                    <i class="fas fa-sign-in-alt"></i> Login
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/toastify-js"></script>
+    <script>
+        document.getElementById('loginForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+
+            try {
+                const response = await fetch('/api/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, password })
+                });
+
+                if (response.ok) {
+                    Toastify({
+                        text: "Login berhasil! Mengarahkan...",
+                        duration: 2000,
+                        gravity: "top",
+                        position: "right",
+                        backgroundColor: "#28a745"
+                    }).showToast();
+                    setTimeout(() => window.location.href = '/kasir', 1500);
+                } else {
+                    const error = await response.json();
+                    Toastify({
+                        text: error.detail || 'Username atau password salah!',
+                        duration: 3000,
+                        gravity: "top",
+                        position: "right",
+                        backgroundColor: "#dc3545"
+                    }).showToast();
+                }
+            } catch (err) {
+                Toastify({
+                    text: 'Terjadi kesalahan jaringan.',
+                    duration: 3000,
+                    gravity: "top",
+                    position: "right",
+                    backgroundColor: "#dc3545"
+                }).showToast();
+            }
+        });
+    </script>
+</body>
+</html>

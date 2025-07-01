@@ -1,0 +1,107 @@
+{% extends "layout.html" %}
+
+{% block title %}Halaman Kasir{% endblock %}
+
+{% block content %}
+<div class="main-grid">
+    <!-- Kolom Kiri: Input dan Daftar Produk -->
+    <div class="left-column">
+        <div class="card">
+            <div class="card-header">
+                <i class="fas fa-barcode"></i>
+                <h2>Input & Cari Barang</h2>
+            </div>
+            <div class="card-body">
+                <div class="form-grid">
+                    <div class="form-group" style="position: relative;">
+                        <label for="nama_barang">Cari Nama Barang</label>
+                        <input type="text" id="nama_barang" placeholder="Ketik untuk mencari produk...">
+                        <div id="suggestions" class="suggestions"></div>
+                    </div>
+                    <div class="form-group">
+                        <label for="jumlah">Jumlah</label>
+                        <input type="number" id="jumlah" placeholder="1" min="1" value="1">
+                    </div>
+                </div>
+                <button onclick="tambahBarang()" class="btn btn-primary" style="margin-top: 1rem;">
+                    <i class="fas fa-plus"></i> Tambah ke Keranjang
+                </button>
+            </div>
+        </div>
+        <div class="card">
+            <div class="card-header">
+                <i class="fas fa-th-large"></i>
+                <h2>Pilih Produk</h2>
+            </div>
+            <div class="card-body">
+                <div id="product-list-container">
+                    <!-- Daftar produk dari JS akan ditampilkan di sini -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Kolom Kanan: Keranjang dan Pembayaran -->
+    <div class="right-column">
+        <div class="card">
+            <div class="card-header">
+                <i class="fas fa-shopping-cart"></i>
+                <h2>Keranjang Belanja</h2>
+            </div>
+            <div class="card-body">
+                <div class="table-wrapper">
+                    <table class="modern-table" id="tabel_keranjang">
+                        <thead>
+                            <tr>
+                                <th>Nama</th>
+                                <th>Qty</th>
+                                <th>Subtotal</th>
+                                <th>Aksi</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <!-- Item keranjang akan ditambahkan di sini oleh JS -->
+                        </tbody>
+                    </table>
+                </div>
+                 <div id="total_belanja">Total: <span id="total">Rp 0</span></div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <i class="fas fa-credit-card"></i>
+                <h2>Pembayaran</h2>
+            </div>
+            <div class="card-body">
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label for="metode_pembayaran">Metode Pembayaran</label>
+                        <select id="metode_pembayaran">
+                            <option value="tunai">Tunai</option>
+                            <option value="non_tunai" disabled>Non-Tunai (Segera Hadir)</option>
+                        </select>
+                    </div>
+                    <div id="pembayaran_tunai" class="form-group">
+                        <label for="uang_tunai">Uang Tunai (Rp)</label>
+                        <input type="number" id="uang_tunai" placeholder="Masukkan jumlah uang">
+                    </div>
+                </div>
+                <p style="margin-top: 1rem;">Kembalian: <span id="kembalian" style="font-weight: 600;">Rp 0</span></p>
+                <button onclick="prosesPembayaran()" class="btn btn-primary btn-block" style="margin-top: 1.5rem;">
+                    <i class="fas fa-check-circle"></i> Proses Pembayaran
+                </button>
+                <div id="struk" style="display: none; margin-top: 2rem;">
+                    <h3>Struk Pembayaran</h3>
+                    <pre id="struk-content"></pre>
+                    <button onclick="printStruk()" class="btn btn-primary" style="margin-top: 1rem;"><i class="fas fa-print"></i> Cetak Struk</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', path='js/kasir.js') }}"></script>
+{% endblock %}

@@ -1,192 +1,275 @@
-document.addEventListener("DOMContentLoaded", function () {
-    // Fetch all product names for the suggestions
-    fetch('http://localhost:8000/produk/nama/')
-        .then(response => response.json())
-        .then(data => {
-            const suggestionsContainer = document.getElementById('suggestions');
-            const namaBarangInput = document.getElementById('nama_barang');
+let allProducts = [];
+let cart = {};
 
-            namaBarangInput.addEventListener('input', function () {
-                const input = namaBarangInput.value.toLowerCase();
-                suggestionsContainer.innerHTML = '';
-                if (input) {
-                    const filteredNames = data.filter(name => name.toLowerCase().includes(input));
-                    filteredNames.forEach(name => {
-                        const suggestionItem = document.createElement('div');
-                        suggestionItem.textContent = name;
-                        suggestionItem.classList.add('suggestion-item');
-                        suggestionItem.onclick = function () {
-                            namaBarangInput.value = name;
-                            suggestionsContainer.innerHTML = '';
-                        };
-                        suggestionsContainer.appendChild(suggestionItem);
-                    });
-                }
-            });
-        })
-        .catch(error => console.error('Error fetching nama barang:', error));
+document.addEventListener("DOMContentLoaded", async function () {
+    await loadInitialData();
+    setupAutocomplete();
+    document.getElementById('uang_tunai').addEventListener('input', updateKembalian);
 });
 
-async function tambahBarang() {
-    const namaBarang = document.getElementById('nama_barang').value;
-    const jumlah = parseInt(document.getElementById('jumlah').value);
+async function loadInitialData() {
+    try {
+        const response = await fetch('/api/produk/');
+        if (!response.ok) throw new Error('Gagal mengambil daftar produk.');
 
-    if (namaBarang && jumlah > 0) {
-        try {
-            const response = await fetch(`http://localhost:8000/produk/nama/${namaBarang}`);
-            if (response.ok) {
-                const result = await response.json();
-                const subtotal = result.harga * jumlah;
-                const tbody = document.getElementById('tabel_keranjang').querySelector('tbody');
-                let row = tbody.insertRow();
+        allProducts = await response.json();
+        renderProductList();
 
-                row.innerHTML = `
-                    <td>${result.kode}</td>
-                    <td>${result.nama}</td>
-                    <td>${result.harga}</td>
-                    <td>${jumlah}</td>
-                    <td>${subtotal}</td>
-                    <td><button onclick="hapusBarang(this)">Hapus</button></td>
-                `;
-
-                updateTotalBelanja();
-                document.getElementById('nama_barang').value = '';
-                document.getElementById('jumlah').value = '';
-            } else {
-                alert('Produk tidak ditemukan!');
-            }
-        } catch (error) {
-            alert('Terjadi kesalahan saat mengambil data produk.');
-            console.error('Error:', error);
+    } catch (error) {
+        console.error('Error fetching initial data:', error);
+        showToast(error.message, 'error');
+        const productContainer = document.getElementById('product-list-container');
+        if (productContainer) {
+            productContainer.innerHTML = `<p style="color:red;">${error.message}</p>`;
         }
-    } else {
-        alert('Mohon pilih nama barang dan masukkan jumlah yang valid!');
     }
 }
 
-function updateTotalBelanja() {
-    const tbody = document.getElementById('tabel_keranjang').querySelector('tbody');
-    let total = 0;
-    for (let row of tbody.rows) {
-        total += parseInt(row.cells[4].textContent);
-    }
-    document.getElementById('total').textContent = total;
-}
+function renderProductList() {
+    const container = document.getElementById('product-list-container');
+    container.innerHTML = '';
 
-function hapusBarang(button) {
-    const row = button.closest('tr');
-    row.remove();
-    updateTotalBelanja();
-}
-
-async function prosesPembayaran() {
-    const totalBelanja = parseInt(document.getElementById('total').textContent);
-    let uangTunai = parseInt(document.getElementById('uang_tunai').value) || 0;
-
-    if(uangTunai === 0){
-         uangTunai = parseInt(prompt("Masukkan Jumlah Uang: ", 0));
-    }
-
-    let kembalian = uangTunai - totalBelanja;
-
-    if (kembalian < 0) {
-        alert('Uang tunai tidak cukup!');
+    if (allProducts.length === 0) {
+        container.innerHTML = '<p>Tidak ada produk di database.</p>';
         return;
     }
 
-    // Tampilkan data struk
-    const strukContent = `
-        <p>Total Belanja: Rp ${totalBelanja}</p>
-        <p>Uang Tunai: Rp ${uangTunai}</p>
-        <p>Kembalian: Rp ${kembalian}</p>
-        <h4>Detail Belanja:</h4>
-        <table>
-            <thead>
-                <tr>
-                    <th>Kode Barang</th>
-                    <th>Nama Barang</th>
-                    <th>Harga</th>
-                    <th>Jumlah</th>
-                    <th>Subtotal</th>
-                </tr>
-            </thead>
-            <tbody>
-                ${getStrukDetail()}
-            </tbody>
-        </table>
-    `;
-    document.getElementById('struk-content').innerHTML = strukContent;
-    document.getElementById('struk').style.display = 'block';
+    allProducts.forEach(produk => {
+        const card = document.createElement('div');
+        card.className = 'product-card';
+        card.onclick = () => addProductToCart(produk.kode);
 
-    // Tunggu konfirmasi cetak struk
-    if (confirm("Cetak struk?")) {
-        printStruk();
+        card.innerHTML = `
+            <div class="product-card-name" title="${produk.nama}">${produk.nama}</div>
+            <div class="product-card-price">${formatRupiah(produk.harga)}</div>
+            <div class="product-card-stock">Stok: ${produk.jumlah}</div>
+        `;
+        container.appendChild(card);
+    });
+}
 
-        // Ambil data dari tabel keranjang
-        const cartItems = [];
-        const tbody = document.getElementById('tabel_keranjang').querySelector('tbody');
-        for (let row of tbody.rows) {
-            cartItems.push({
-                produk_id: row.cells[0].textContent, 
-                quantity: parseInt(row.cells[3].textContent)
-            });
-        }
+function addProductToCart(productCode, quantity = 1) {
+    const produk = allProducts.find(p => p.kode === productCode);
 
-       
-        try {
-            const response = await fetch('http://localhost:8000/penjualan/', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    metode_pembayaran: 'tunai',
-                    produk_items: cartItems
-                })
-            });
+    if (!produk) {
+        showToast('Produk tidak valid!', 'error');
+        return;
+    }
 
-            if (response.ok) {
-                alert('Pembayaran Berhasil dan Selesai.');
-            } else {
-                alert('Terjadi kesalahan saat memproses pembayaran.');
-            }
-        } catch (error) {
-            alert('Terjadi kesalahan saat menghubungi server.');
-            console.error('Error:', error);
-        }
+    const currentQuantityInCart = cart[produk.kode] ? cart[produk.kode].quantity : 0;
+    if (produk.jumlah < currentQuantityInCart + quantity) {
+        showToast(`Stok '${produk.nama}' tidak mencukupi! Sisa: ${produk.jumlah}`, 'error');
+        return;
+    }
+
+    if (cart[produk.kode]) {
+        cart[produk.kode].quantity += quantity;
+    } else {
+        cart[produk.kode] = { data: produk, quantity: quantity };
+    }
+
+    renderCart();
+    showToast(`${produk.nama} ditambahkan ke keranjang`, 'info');
+}
+
+function tambahBarang() {
+    const namaBarang = document.getElementById('nama_barang').value;
+    const jumlah = parseInt(document.getElementById('jumlah').value);
+
+    if (!namaBarang || isNaN(jumlah) || jumlah <= 0) {
+        showToast('Pilih nama barang dan masukkan jumlah yang valid!', 'error');
+        return;
+    }
+
+    const produk = allProducts.find(p => p.nama === namaBarang);
+    if (produk) {
+        addProductToCart(produk.kode, jumlah);
+        document.getElementById('nama_barang').value = '';
+        document.getElementById('jumlah').value = '1';
+    } else {
+        showToast('Produk tidak ditemukan. Pilih dari daftar atau autocomplete.', 'error');
     }
 }
 
+function setupAutocomplete() {
+    const namaBarangInput = document.getElementById('nama_barang');
+    const suggestionsContainer = document.getElementById('suggestions');
+    const productNames = allProducts.map(p => p.nama);
 
-function getStrukDetail() {
+    namaBarangInput.addEventListener('input', function () {
+        const input = namaBarangInput.value.toLowerCase();
+        suggestionsContainer.innerHTML = '';
+        if (input.length > 0) {
+            const filteredNames = productNames.filter(name => name.toLowerCase().includes(input));
+            filteredNames.forEach(name => {
+                const suggestionItem = document.createElement('div');
+                suggestionItem.textContent = name;
+                suggestionItem.classList.add('suggestion-item');
+                suggestionItem.onclick = function () {
+                    namaBarangInput.value = name;
+                    suggestionsContainer.style.display = 'none';
+                };
+                suggestionsContainer.appendChild(suggestionItem);
+            });
+            suggestionsContainer.style.display = filteredNames.length > 0 ? 'block' : 'none';
+        } else {
+            suggestionsContainer.style.display = 'none';
+        }
+    });
+
+    document.addEventListener('click', (e) => {
+        if (!namaBarangInput.contains(e.target)) {
+            suggestionsContainer.style.display = 'none';
+        }
+    });
+}
+
+function renderCart() {
     const tbody = document.getElementById('tabel_keranjang').querySelector('tbody');
-    let detail = '';
-    for (let row of tbody.rows) {
-        detail += `
-            <tr>
-                <td>${row.cells[0].textContent}</td>
-                <td>${row.cells[1].textContent}</td>
-                <td>${row.cells[2].textContent}</td>
-                <td>${row.cells[3].textContent}</td>
-                <td>${row.cells[4].textContent}</td>
-            </tr>
-        `;
+    tbody.innerHTML = '';
+    let total = 0;
+
+    if (Object.keys(cart).length === 0) {
+        tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;">Keranjang kosong</td></tr>';
+    } else {
+        for (const kode in cart) {
+            const item = cart[kode];
+            const subtotal = item.data.harga * item.quantity;
+            total += subtotal;
+
+            const row = tbody.insertRow();
+            row.innerHTML = `
+                <td>${item.data.nama}</td>
+                <td>${item.quantity}</td>
+                <td>${formatRupiah(subtotal)}</td>
+                <td><button onclick="hapusBarang('${kode}')" class="btn btn-danger btn-sm"><i class="fas fa-trash"></i></button></td>
+            `;
+        }
     }
-    return detail;
+
+    document.getElementById('total').textContent = formatRupiah(total);
+    updateKembalian();
+}
+
+function hapusBarang(kode) {
+    delete cart[kode];
+    renderCart();
+}
+
+function updateKembalian() {
+    const totalText = document.getElementById('total').textContent.replace(/[^0-9]/g, '');
+    const totalBelanja = parseInt(totalText) || 0;
+    const uangTunai = parseInt(document.getElementById('uang_tunai').value) || 0;
+    const kembalian = uangTunai - totalBelanja;
+
+    document.getElementById('kembalian').textContent = formatRupiah(Math.max(0, kembalian));
+}
+
+async function prosesPembayaran() {
+    if (Object.keys(cart).length === 0) {
+        showToast('Keranjang belanja kosong!', 'error'); return;
+    }
+
+    const totalText = document.getElementById('total').textContent.replace(/[^0-9]/g, '');
+    const totalBelanja = parseInt(totalText) || 0;
+    const uangTunai = parseInt(document.getElementById('uang_tunai').value) || 0;
+
+    if (uangTunai < totalBelanja) {
+        showToast('Uang tunai tidak cukup!', 'error'); return;
+    }
+
+    const payload = {
+        metode_pembayaran: 'tunai',
+        produk_items: Object.values(cart).map(item => ({
+            produk_id: item.data.kode,
+            quantity: item.quantity
+        }))
+    };
+
+    const prosesBtn = document.querySelector('button[onclick="prosesPembayaran()"]');
+    prosesBtn.disabled = true;
+    prosesBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Memproses...';
+
+    try {
+        const response = await fetch('/api/penjualan/', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.detail || 'Terjadi kesalahan server.');
+
+        showToast('Pembayaran Berhasil!', 'success');
+        tampilkanStruk(totalBelanja, uangTunai);
+        resetKasir();
+        await loadInitialData();
+
+    } catch (error) {
+        showToast(`Gagal: ${error.message}`, 'error');
+        console.error('Error:', error);
+    } finally {
+        prosesBtn.disabled = false;
+        prosesBtn.innerHTML = '<i class="fas fa-check-circle"></i> Proses Pembayaran';
+    }
+}
+
+function tampilkanStruk(total, tunai) {
+    const strukContent = document.getElementById('struk-content');
+    const kembalian = tunai - total;
+
+    let detailHTML = `
+        KasirModern - Struk Pembayaran
+        ================================
+        Total Belanja  : ${formatRupiah(total)}
+        Tunai          : ${formatRupiah(tunai)}
+        Kembalian      : ${formatRupiah(kembalian)}
+        --------------------------------
+        Detail Barang:
+    `;
+
+    Object.values(cart).forEach(item => {
+        detailHTML += `
+        - ${item.data.nama}
+          ${item.quantity} x ${formatRupiah(item.data.harga)} = ${formatRupiah(item.quantity * item.data.harga)}
+        `;
+    });
+
+    detailHTML += `
+        --------------------------------
+        Terima kasih telah berbelanja!
+        ${new Date().toLocaleString('id-ID')}
+    `;
+
+    strukContent.textContent = detailHTML;
+    document.getElementById('struk').style.display = 'block';
 }
 
 function printStruk() {
-    const printContent = document.getElementById('struk-content').innerHTML;
-    const originalContent = document.body.innerHTML;
-
-    document.body.innerHTML = printContent;
-    window.print();
-    document.body.innerHTML = originalContent;
+    const strukKonten = document.getElementById('struk-content').textContent;
+    const printWindow = window.open('', '_blank');
+    printWindow.document.write('<pre>' + strukKonten + '</pre>');
+    printWindow.document.close();
+    printWindow.focus();
+    printWindow.print();
+    printWindow.close();
 }
 
-function toggleTunaiInput(value) {
-    // Jika nanti ada pilihan non-tunai, fungsi ini akan digunakan.
-    // Untuk saat ini pembayaran tunai selalu ditampilkan
-    // karena hanya itu pilihan yang ada.
-    document.getElementById('pembayaran_tunai').style.display = 'block'; 
+function resetKasir() {
+    cart = {};
+    renderCart();
+    document.getElementById('uang_tunai').value = '';
+    updateKembalian();
+}
+
+function showToast(message, type = 'info') {
+    const colors = {
+        success: '#28a745', error: '#dc3545', info: '#4A90E2'
+    };
+    Toastify({ text: message, duration: 2500, gravity: "top", position: "right", backgroundColor: colors[type] }).showToast();
+}
+
+function formatRupiah(angka) {
+    if (isNaN(angka)) return 'Rp 0';
+    return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(angka);
 }

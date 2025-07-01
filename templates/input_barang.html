@@ -1,0 +1,63 @@
+{% extends "layout.html" %}
+
+{% block title %}Input Barang{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div class="card-header">
+        <i class="fas fa-plus-circle"></i>
+        <h2>Input Barang Baru</h2>
+    </div>
+    <div class="card-body">
+        <div class="form-grid">
+            <div class="form-group">
+                <label for="kode_barang_baru">Kode Barang</label>
+                <input type="text" id="kode_barang_baru" required>
+            </div>
+            <div class="form-group">
+                <label for="nama_barang_baru">Nama Barang</label>
+                <input type="text" id="nama_barang_baru" required>
+            </div>
+            <div class="form-group">
+                <label for="harga_barang_baru">Harga Barang (Rp)</label>
+                <input type="number" id="harga_barang_baru" required min="0">
+            </div>
+            <div class="form-group">
+                <label for="jumlah_barang_baru">Jumlah Stok</label>
+                <input type="number" id="jumlah_barang_baru" required min="0">
+            </div>
+        </div>
+        <button onclick="tambahBarangBaru()" class="btn btn-primary" style="margin-top: 1.5rem;">
+            <i class="fas fa-save"></i> Simpan Barang Baru
+        </button>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <i class="fas fa-boxes"></i>
+        <h2>Daftar Stok Barang</h2>
+    </div>
+    <div class="card-body">
+        <div class="table-wrapper">
+            <table class="modern-table" id="tabel_stok">
+                <thead>
+                    <tr>
+                        <th>Kode</th>
+                        <th>Nama Barang</th>
+                        <th>Harga</th>
+                        <th>Stok</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <!-- Data stok akan di-load di sini oleh JS -->
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', path='js/input_barang.js') }}"></script>
+{% endblock %}
